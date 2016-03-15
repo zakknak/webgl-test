@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="ja">
+    <head>
+        <meta charset="utf-8">
+        <title>Shower of Septeni Original Logo</title>
+        <meta name="viewport" content="width=device-width, user-scalable=0">
+        <style>
+            body {
+                margin: 0;
+            }
+            #base_img {
+                display: none;
+            }
+            input.text {
+                width: 80px;
+            }
+        </style>
+        <script src="//code.createjs.com/createjs-2015.11.26.combined.js"></script>
+        <script src="//cdn.rawgit.com/CreateJS/EaselJS/0.8.2/lib/webgl-0.8.2.min.js"></script>
+        <script>
+            var WIDTH = 630;
+            var HEIGHT = 850;
+
+            var stage;
+            var gravity;
+            var wind;
+
+            var distance_1_count;
+            var distance_2_count;
+            var distance_3_count;
+            var distance_4_count;
+
+            var currentHandleTick;
+
+            // Canvasやら何やら初期化
+            function init() {
+                createjs.Ticker.removeEventListener("tick", currentHandleTick);
+                createjs.Tween.removeAllTweens();
+                var canvas = document.createElement("canvas");
+                canvas.height = HEIGHT;
+                canvas.width = WIDTH;
+                var useWebGl = document.getElementsByName("use_webgl").item(0).checked;
+
+                // SpriteStageかStageかでWebGLを使うか制御。SpriteStageはStageを継承しているので同じように扱える。
+                stage = useWebGl ? new createjs.SpriteStage(canvas, false, true) : new createjs.Stage(canvas);
+
+                var div = document.getElementById("main");
+                while (div.firstChild) {
+                    div.removeChild(div.firstChild);
+                }
+                div.appendChild(canvas);
+
+                gravity = ~~document.getElementsByName("gravity").item(0).value;
+                wind = ~~document.getElementsByName("wind").item(0).value;
+                var rate = +document.getElementsByName("amount").item(0).value;
+
+                distance_1_count = 20 * rate;
+                distance_2_count = 50 * rate;
+                distance_3_count = 120 * rate;
+                distance_4_count = 1500 * rate;
+            }
+
+            function run() {
+                init();
+
+                var baseImage = createBaseImage();
+                var spriteSheet = toSpriteSheet([
+                    centered(applyAlpha(applyFilter(applyScale(baseImage.clone(), 5), [new createjs.BlurFilter(12, 12, 2)]), 0.5)),
+                    centered(applyAlpha(applyFilter(applyScale(baseImage.clone(), 2), [new createjs.BlurFilter(5, 5, 2)]), 0.75)),
+                    centered(applyAlpha(applyFilter(applyScale(baseImage.clone(), 0.8), [new createjs.BlurFilter(0, 0, 0)]), 0.4)),
+                    centered(applyAlpha(applyFilter(applyScale(baseImage.clone(), 0.3), [new createjs.BlurFilter(0, 0, 0)]), 0.1))
+                ]);
+
+                var distance1 = createLayer(stage, distance_1_count, spriteSheet, 0, 180);
+                var distance2 = createLayer(stage, distance_2_count, spriteSheet, 1, 100);
+                var distance3 = createLayer(stage, distance_3_count, spriteSheet, 2, 50);
+                var distance4 = createLayer(stage, distance_4_count, spriteSheet, 3, 20);
+
+                var rotation = 0;
+
+                var distance1Handler = getElementHandler(0.9);
+                var distance2Handler = getElementHandler(0.5);
+                var distance3Handler = getElementHandler(0.2);
+                var distance4Handler = getElementHandler(0.1);
+
+                var waveredWind = {
+                    waver: 0,
+                    getValue: function() { return this.waver + wind; }
+                };
+                createjs.Tween.get(waveredWind, {loop: true, paused: false})
+                        .wait(2000)
+                        .to({waver: 7}, 2000)
+                        .wait(500)
+                        .to({waver: 0}, 1800)
+                        .wait(5000)
+                        .to({waver: 10}, 1000)
+                        .wait(1000)
+                        .to({waver: 0}, 2500);
+
+                function getElementHandler(scale) {
+                    return function (element) {
+                        element.y += gravity * scale;
+                        if (element.y > HEIGHT + 100) element.y = -100;
+                        element.x -= waveredWind.getValue() * scale;
+                        if (element.x < -100) element.x = WIDTH + 100;
+                    };
+                }
+
+                createjs.Ticker.framerate = 60;
+                currentHandleTick = createjs.Ticker.addEventListener("tick", handleTick);
+
+                function handleTick(event) {
+                    stage.update();
+                    if (rotation > 360) rotation -= 360;
+                    rotation += 1.3;
+
+                    var rotationHandler = function (a) { a.rotation = rotation; };
+                    distance1.forEach(distance1Handler);
+                    distance1.forEach(rotationHandler);
+                    distance2.forEach(distance2Handler);
+                    distance2.forEach(rotationHandler);
+                    distance3.forEach(distance3Handler);
+                    distance3.forEach(rotationHandler);
+                    distance4.forEach(distance4Handler);
+                    distance4.forEach(rotationHandler);
+                }
+            }
+
+            function createLayer(stage, elementNum, spriteSheet, index, tweenScale) {
+                var arr = [];
+                for (var i = 0; i < elementNum; i++) {
+                    arr.push(createElement(stage, spriteSheet, index, tweenScale));
+                }
+                return arr;
+            }
+
+            // 複数の画像をCanvasに貼り付けて1つの画像にし、スプライトシートを作成する
+            function toSpriteSheet(bitmapArray) {
+                var width = bitmapArray.map(function(a) {return a.image.width;}).reduce(function(a, b) { return a + b; });
+                var height = bitmapArray.map(function(a) {return a.image.height;}).reduce(function(a, b) { return a > b ? a : b; });
+                var tmpCanvas = document.createElement("canvas");
+                tmpCanvas.height = height;
+                tmpCanvas.width = width;
+                var tmpStage = new createjs.Stage(tmpCanvas);
+                var offset = 0;
+                var frames = [];
+                bitmapArray.forEach(function(a) {
+                    a.x = offset;
+                    frames.push([offset, 0, a.image.width, a.image.height, 0, a.image.width / 2, a.image.height / 2]);
+                    offset += a.image.width;
+                    a.regX = 0;
+                    a.regY = 0;
+                    tmpStage.addChild(a);
+                });
+                tmpStage.update();
+                return new createjs.SpriteSheet({
+                    images: [tmpStage.toDataURL()],
+                    frames: frames
+                });
+            }
+
+            // canvasに貼り付けるロゴを1つ作成する
+            function createElement(stage, spriteSheet, index, tweenScale) {
+                var logo = new createjs.Sprite(spriteSheet);
+                logo.gotoAndStop(index);
+                var moveCont = new createjs.SpriteContainer(spriteSheet);
+                moveCont.addChild(logo);
+                stage.addChild(moveCont);
+                moveCont.x = Math.random()* (WIDTH + 200) - 100;
+                moveCont.y = Math.random() * (HEIGHT + 200) - 100;
+                addRandomTween(logo, tweenScale);
+                return moveCont;
+            }
+
+            // ランダムにぎゅい～ん
+            function addRandomTween(target, scale) {
+                var moveX = Math.random() * scale;
+                var moveY = Math.random() * scale;
+                var timeX = Math.random() * 1500 + 800;
+                var timeY = Math.random() * 1500 + 800;
+                var timeOffsetX = Math.random() * timeX;
+                var timeOffsetY = Math.random() * timeY;
+
+                var tweenX = createjs.Tween.get(target, {loop: true, position: timeOffsetX, paused: false});
+                tweenX.to({x: target.x + moveX}, timeX, createjs.Ease.sineInOut).to({x: target.x}, timeX, createjs.Ease.sineInOut);
+                var tweenY = createjs.Tween.get(target, {loop: true, position: timeOffsetY, paused: false});
+                tweenY.to({y: target.y + moveY}, timeY, createjs.Ease.sineInOut).to({y: target.y}, timeY, createjs.Ease.sineInOut);
+
+                return target;
+            }
+
+            function centered(bitmap) {
+                bitmap.regX = bitmap.image.width / 2;
+                bitmap.regY = bitmap.image.height / 2;
+                return bitmap;
+            }
+
+            function applyAlpha(bitmap, alpha) {
+                var width = bitmap.image.width;
+                var height = bitmap.image.height;
+                var tmpCanvas = document.createElement("canvas");
+                tmpCanvas.width = width;
+                tmpCanvas.height = height;
+                var tmpStage = new createjs.Stage(tmpCanvas);
+                bitmap.alpha = alpha;
+                tmpStage.addChild(bitmap);
+                tmpStage.update();
+                return new createjs.Bitmap(tmpStage.canvas);
+            }
+
+            function applyScale(bitmap, scale) {
+                var width = bitmap.image.width;
+                var height = bitmap.image.height;
+                var tmpCanvas = document.createElement("canvas");
+                tmpCanvas.width = width * scale;
+                tmpCanvas.height = height * scale;
+                var tmpStage = new createjs.Stage(tmpCanvas);
+                bitmap.scaleX = scale;
+                bitmap.scaleY = scale;
+                tmpStage.addChild(bitmap);
+                tmpStage.update();
+                return new createjs.Bitmap(tmpStage.canvas);
+            }
+
+            function applyFilter(bitmap, filters) {
+                bitmap.filters = filters;
+                bitmap.cache(0, 0, bitmap.image.width,  bitmap.image.height);
+                return new createjs.Bitmap(bitmap.cacheCanvas);
+            }
+
+            // js上で、透過ロゴを作成しようと試行錯誤する関数
+            function createBaseImage() {
+                var img = document.getElementById("base_img");
+                var tmpCanvas = document.createElement("canvas");
+                tmpCanvas.height = img.height;
+                tmpCanvas.width = img.width;
+
+                // CreateJSにはピクセル単位で画像を扱う機能がないため、直接2Dコンテキストを弄る
+                var ctx = tmpCanvas.getContext("2d");
+                ctx.drawImage(img, 0, 0);
+                var imageData = ctx.getImageData(0, 0, tmpCanvas.width, tmpCanvas.height);
+                var pixelData = imageData.data;
+
+                var pixelCount =  tmpCanvas.width * tmpCanvas.height;
+                for (var i = 0; i < pixelCount; i++) {
+                    var index = i * 4;
+                    if (pixelData[index] > 200 && pixelData[index + 1] > 200 && pixelData[index + 2] > 200) {
+                        pixelData[index + 3] = 0;
+                    }
+                }
+                ctx.putImageData(imageData, 0, 0);
+
+                return applyFilter(new createjs.Bitmap(tmpCanvas), [new createjs.BlurFilter(2, 2, 0)]);
+            }
+
+        </script>
+    </head>
+
+    <body onload="run()">
+        <div id="main"></div>
+        <!-- Same-Origin Policyに引っかかり、いろいろと面倒なのでdataURLを使用している -->
+        <img id="base_img" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAAA8CAMAAAANIilAAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAI1QTFRFd9Dr5Z7E/vT06lZW97y8+tLS73h49Pv9u+f18Y+P6Pf80u/4VcTmpeDy7GJimdzwjtju+93d9KWlsOPz9bCw85qa3fP6+MfHYcjnbMzp/Onpxuv3g9Ts7r7Y7W1t++/18IOD4I268s7h9t/r+Ofw3oW16a7O/ff656bJ67bT8Mbc3H2wSsDk6UtL////0nP2sgAAAolJREFUeNq8l+d6mzAUhoWYBjMMGDyDE9tJWwT3f3kVGG0xQp72/LPh5ejTWRJof2Dg38LVn+t9LfxRY3t/rIKrZwfXz8ca+Fq/7H0NbAxw/fET+HMWhvnG2Zda2JiDLbPpLCpXwHlDzPo2DBtmOwW+TsM2BzsK/FgON7YEG+3yZTcbCb7PJcmep08CLCTYOQwzV4bhm+raUPKrOCJsRyXOcMPRkIM5x94W9eap6clC3aQczOIUo8ESTW7vTAKbkMLPr+GpCwiLgK4wmHCLwr+J3ANlUayvKiI8onAlyu0tGClJi3NtsGqMObRftb6eB+HOAFeSXGxbf7wZDMLtHjZkuQgdCinD/EIRfuvhuywXxa6QnkXSPT3GgSi8bT/rX6Lc7cVzxdz2uGeZPwiPOri6fnFyj2GgFMYZCXaIz/3Hrfz1zuX12YS55OEDUgyQBWDrfxYjJRkgrcWLBl2oh5G/Ht6GJOg2nIAzjeTwTF/B6WbecnsE9sW9vmSveECrFLoTniVQs9s0zMfYo0JLs4uzG7Ay6yptY+3kBhgkAIAwcKWOFHW5ldAxRLqEk58mp2SXXn0TxMmF1Z/41tjZHo7DOW2/YGiUe4l2xmB4Y90XDE2j34JGmmYa2I64kQNI12ih08jzSIVTcWWkX/FPyESRYe77NoWBvCa8YxrN0JSmLECc6xamJsfKsCMPWYB41xgv0zTVx9lSxjuYKjARvinTHbDJNAczxVErwHrXItwo5yGAJlyPeI5aCda6BtoZxw5iAE24FmFyIHqj/1xoV3JnD66vDDRZwWfCTJ059Vo4Ax2uWbh0SIUrrgm0tXprLijJ+HYvuBrFY44X3atcL8wWZNj/vNH9FWAAiP5RZ1wc/KUAAAAASUVORK5CYII=">
+        <div>
+            <label><input type="radio" name="use_webgl" value="true" checked="checked">WebGLを使用する</label>
+            <label><input type="radio" name="use_webgl" value="false">WebGLを使用しない</label>
+            <br>
+            ロゴを増量:<input type="number" class="text" name="amount" value="1">倍
+            gravity:<input type="number" class="text" name="gravity" value="6">
+            wind:<input type="number" class="text" name="wind" value="4">
+            <button onclick="run()">GO!!!!!!</button>
+        </div>
+    </body>
+</html>
